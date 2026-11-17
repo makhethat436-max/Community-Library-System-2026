@@ -22,8 +22,11 @@ function Books() {
     Authorization: `Bearer ${token}`
   };
 
+  // Load books from the database
   const loadBooks = async () => {
     try {
+      setError("");
+
       const response = await fetch(API_URL, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -34,7 +37,7 @@ function Books() {
         throw new Error(data.message || "Could not load books.");
       }
 
-      setBooks(data);
+      setBooks(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err.message || "Unable to connect to the server.");
     }
@@ -44,6 +47,7 @@ function Books() {
     loadBooks();
   }, []);
 
+  // Clear the form
   const clearForm = () => {
     setTitle("");
     setAuthor("");
@@ -53,18 +57,25 @@ function Books() {
     setEditId(null);
   };
 
+  // Add or update a book
   const saveBook = async (e) => {
     e.preventDefault();
+
     setMessage("");
     setError("");
 
     const book = {
-      title,
-      author,
-      genre,
-      isbn,
+      title: title.trim(),
+      author: author.trim(),
+      genre: genre.trim(),
+      isbn: isbn.trim(),
       quantity: Number(quantity)
     };
+
+    if (!Number.isInteger(book.quantity) || book.quantity < 0) {
+      setError("Quantity must be a valid whole number of zero or more.");
+      return;
+    }
 
     try {
       const response = await fetch(
@@ -95,6 +106,7 @@ function Books() {
     }
   };
 
+  // Select a book for editing
   const editBook = (book) => {
     setTitle(book.title);
     setAuthor(book.author);
@@ -102,10 +114,12 @@ function Books() {
     setIsbn(book.isbn);
     setQuantity(book.quantity);
     setEditId(book.id);
+
     setMessage("");
     setError("");
   };
 
+  // Delete a book
   const deleteBook = async (id) => {
     if (!window.confirm("Are you sure you want to delete this book?")) {
       return;
@@ -138,25 +152,42 @@ function Books() {
     }
   };
 
+  // Search books
   const filteredBooks = books.filter((book) =>
     `${book.title} ${book.author} ${book.isbn} ${book.genre || ""}`
       .toLowerCase()
       .includes(search.toLowerCase())
   );
 
+  // Calculate total copies
   const totalCopies = books.reduce(
-    (total, book) => total + Number(book.quantity || 0),
+    (total, book) => {
+      const quantity = Number(book.quantity);
+
+      return total + (
+        Number.isFinite(quantity) && quantity >= 0
+          ? quantity
+          : 0
+      );
+    },
     0
   );
 
-  const lowStock = books.filter(
-    (book) => Number(book.quantity) < 2
-  ).length;
+  // Only books with fewer than 2 copies are low stock
+  const lowStockBooks = books.filter((book) => {
+    const quantity = Number(book.quantity);
+
+    return (
+      Number.isFinite(quantity) &&
+      quantity >= 0 &&
+      quantity < 2
+    );
+  });
+
+  const lowStock = lowStockBooks.length;
 
   return (
     <div className="books-page">
-
-      {/* PAGE HEADING */}
 
       <div className="books-heading">
         <div>
@@ -164,8 +195,6 @@ function Books() {
           <p>Add, update, search and manage library books.</p>
         </div>
       </div>
-
-      {/* MESSAGES */}
 
       {message && (
         <div className="success-message">{message}</div>
@@ -199,6 +228,7 @@ function Books() {
       {/* ADD OR UPDATE BOOK FORM */}
 
       <section className="book-form-section">
+
         <div className="books-section-heading">
           <div>
             <h3>{editId ? "Update Book" : "Add New Book"}</h3>
@@ -263,6 +293,7 @@ function Books() {
                 type="number"
                 placeholder="Enter quantity"
                 min="0"
+                step="1"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 required
@@ -272,6 +303,7 @@ function Books() {
           </div>
 
           <div className="book-form-actions">
+
             <button type="submit" className="btn primary">
               {editId ? "Update Book" : "Add Book"}
             </button>
@@ -285,9 +317,11 @@ function Books() {
                 Cancel
               </button>
             )}
+
           </div>
 
         </form>
+
       </section>
 
       {/* BOOK INVENTORY */}
@@ -310,7 +344,9 @@ function Books() {
         />
 
         <div className="table-wrap">
+
           <table>
+
             <thead>
               <tr>
                 <th>Title</th>
@@ -324,58 +360,66 @@ function Books() {
             </thead>
 
             <tbody>
-              {filteredBooks.map((book) => (
-                <tr
-                  key={book.id}
-                  className={
-                    Number(book.quantity) < 2 ? "low-stock-row" : ""
-                  }
-                >
-                  <td>{book.title}</td>
-                  <td>{book.author}</td>
-                  <td>{book.genre || "Not specified"}</td>
-                  <td>{book.isbn}</td>
-                  <td>{book.quantity}</td>
 
-                  <td>
-                    <span
-                      className={`dashboard-status ${
-                        Number(book.quantity) > 0
-                          ? Number(book.quantity) < 2
-                            ? "low"
-                            : "available"
-                          : "low"
-                      }`}
-                    >
-                      {Number(book.quantity) === 0
-                        ? "Out of Stock"
-                        : Number(book.quantity) < 2
-                          ? "Low Stock"
-                          : "Available"}
-                    </span>
-                  </td>
+              {filteredBooks.map((book) => {
+                const bookQuantity = Number(book.quantity);
 
-                  <td>
-                    <div className="actions">
-                      <button
-                        type="button"
-                        className="btn primary small-btn"
-                        onClick={() => editBook(book)}
+                const isLowStock =
+                  Number.isFinite(bookQuantity) &&
+                  bookQuantity >= 0 &&
+                  bookQuantity < 2;
+
+                const isOutOfStock = bookQuantity === 0;
+
+                return (
+                  <tr
+                    key={book.id}
+                    className={isLowStock ? "low-stock-row" : ""}
+                  >
+                    <td>{book.title}</td>
+                    <td>{book.author}</td>
+                    <td>{book.genre || "Not specified"}</td>
+                    <td>{book.isbn}</td>
+                    <td>{book.quantity}</td>
+
+                    <td>
+                      <span
+                        className={`dashboard-status ${
+                          isLowStock ? "low" : "available"
+                        }`}
                       >
-                        Edit
-                      </button>
+                        {isOutOfStock
+                          ? "Out of Stock"
+                          : isLowStock
+                            ? "Low Stock"
+                            : "Available"}
+                      </span>
+                    </td>
 
-                      <button
-                        type="button"
-                        className="btn danger small-btn"
-                        onClick={() => deleteBook(book.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    <td>
+                      <div className="actions">
+
+                        <button
+                          type="button"
+                          className="btn primary small-btn"
+                          onClick={() => editBook(book)}
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn danger small-btn"
+                          onClick={() => deleteBook(book.id)}
+                        >
+                          Delete
+                        </button>
+
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {filteredBooks.length === 0 && (
                 <tr>
@@ -384,8 +428,11 @@ function Books() {
                   </td>
                 </tr>
               )}
+
             </tbody>
+
           </table>
+
         </div>
 
         <p className="books-total">

@@ -19,6 +19,9 @@ function Dashboard() {
   useEffect(() => {
     const loadDashboard = async () => {
       try {
+        setLoading(true);
+        setError("");
+
         const token = localStorage.getItem("token");
 
         const headers = {
@@ -26,34 +29,46 @@ function Dashboard() {
         };
 
         const requests = [
-          fetch(`${API_URL}/books`, { headers }),
-          fetch(`${API_URL}/transactions`, { headers })
+          fetch(`${API_URL}/books`, {
+            headers,
+            cache: "no-store"
+          }),
+          fetch(`${API_URL}/transactions`, {
+            headers,
+            cache: "no-store"
+          })
         ];
 
-        // Only Admins can retrieve all registered users.
         if (role === "Admin") {
           requests.push(
-            fetch(`${API_URL}/users`, { headers })
+            fetch(`${API_URL}/users`, {
+              headers,
+              cache: "no-store"
+            })
           );
         }
 
         const responses = await Promise.all(requests);
 
         if (responses.some(response => !response.ok)) {
-          throw new Error(
-            "Could not load dashboard information."
-          );
+          throw new Error("Could not load dashboard information.");
         }
 
         const booksData = await responses[0].json();
         const transactionsData = await responses[1].json();
 
+        if (!Array.isArray(booksData)) {
+          throw new Error("Invalid book information received.");
+        }
+
         setBooks(booksData);
-        setTransactions(transactionsData);
+        setTransactions(
+          Array.isArray(transactionsData) ? transactionsData : []
+        );
 
         if (role === "Admin") {
           const usersData = await responses[2].json();
-          setUsers(usersData);
+          setUsers(Array.isArray(usersData) ? usersData : []);
         }
 
       } catch (err) {
@@ -68,14 +83,30 @@ function Dashboard() {
     loadDashboard();
   }, [role]);
 
+  // Calculate total copies
   const totalBooks = books.reduce(
-    (total, book) => total + Number(book.quantity || 0),
+    (total, book) => {
+      const quantity = Number(book.quantity);
+
+      return total + (
+        Number.isFinite(quantity) && quantity >= 0
+          ? quantity
+          : 0
+      );
+    },
     0
   );
 
-  const lowStockBooks = books.filter(
-    book => Number(book.quantity) < 2
-  );
+  // Calculate books with fewer than two copies
+  const lowStockBooks = books.filter(book => {
+    const quantity = Number(book.quantity);
+
+    return (
+      Number.isFinite(quantity) &&
+      quantity >= 0 &&
+      quantity < 2
+    );
+  });
 
   const availableBooks = books.filter(
     book => Number(book.quantity) > 0
@@ -148,6 +179,7 @@ function Dashboard() {
           </div>
 
           <section className="dashboard-section">
+
             <div className="section-heading">
               <div>
                 <h3>Book Availability</h3>
@@ -200,6 +232,7 @@ function Dashboard() {
                 </tbody>
               </table>
             </div>
+
           </section>
         </>
 
@@ -245,6 +278,8 @@ function Dashboard() {
             </div>
 
           </div>
+
+          {/* LOW STOCK ALERT */}
 
           <section className="dashboard-section">
 
@@ -298,6 +333,8 @@ function Dashboard() {
             )}
 
           </section>
+
+          {/* BOOK AVAILABILITY */}
 
           <section className="dashboard-section">
 
@@ -362,6 +399,8 @@ function Dashboard() {
 
           </section>
 
+          {/* RECENT TRANSACTIONS */}
+
           <section className="dashboard-section">
 
             <div className="section-heading">
@@ -406,6 +445,7 @@ function Dashboard() {
             )}
 
           </section>
+
         </>
 
       )}
